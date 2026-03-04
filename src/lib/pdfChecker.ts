@@ -51,6 +51,45 @@ export async function checkPdfPolicy(file: File): Promise<PolicyCheckResult> {
         let resolutionOk = true;
         let lineWidthOk = true;
 
+        // --- Structural CMYK Check (Raster Images) with pdf-lib ---
+        try {
+            const { PDFDocument, PDFStream, PDFName } = await import('pdf-lib');
+            const pdfDoc = await PDFDocument.load(arrayBuffer);
+            const context = pdfDoc.context;
+            const objects = context.enumerateIndirectObjects();
+
+            for (const [, obj] of objects) {
+                if (obj instanceof PDFStream) {
+                    const dict = obj.dict;
+                    const subtype = dict.get(PDFName.of('Subtype'));
+                    if (subtype === PDFName.of('Image')) {
+                        const colorSpace = dict.get(PDFName.of('ColorSpace'));
+                        let csName = 'unknown';
+
+                        if (colorSpace instanceof PDFName) {
+                            csName = colorSpace.decodeText();
+                        } else if (colorSpace && colorSpace.constructor.name === 'PDFArray') {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const arr = colorSpace as any;
+                            if (arr.size() > 0) {
+                                const first = arr.get(0);
+                                if (first instanceof PDFName) {
+                                    csName = first.decodeText();
+                                }
+                            }
+                        }
+
+                        if (csName.includes('RGB')) {
+                            cmykOk = false;
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("Structural color space scanning failed:", err);
+        }
+        // -----------------------------------------------------------
+
         const RESOLUTION_THRESHOLD = 300; // dpi
         const LINE_WIDTH_THRESHOLD = 0.3; // pt
 
@@ -150,7 +189,7 @@ export async function checkPdfPolicy(file: File): Promise<PolicyCheckResult> {
                             }
                         }
                     } catch (e) {
-                        console.warn("Could not inspect image:", imgName);
+                        console.warn("Could not inspect image:", imgName, e);
                     }
                 }
             }
@@ -165,7 +204,7 @@ export async function checkPdfPolicy(file: File): Promise<PolicyCheckResult> {
             pageCount: numPages
         };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("PDF Parsing error:", error);
         return {
             isPdfCompatible: false,
