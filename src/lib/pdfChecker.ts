@@ -76,6 +76,22 @@ export async function checkPdfPolicy(file: File): Promise<PolicyCheckResult> {
                                 if (first instanceof PDFName) {
                                     csName = first.decodeText();
                                 }
+
+                                // Check for ICCBased profile which Canva uses for RGB
+                                if (csName === 'ICCBased' && arr.size() > 1) {
+                                    try {
+                                        const profileStreamRef = arr.get(1);
+                                        const profileStream = context.lookup(profileStreamRef);
+                                        if (profileStream && profileStream.constructor.name === 'PDFRawStream') {
+                                            // We can check the N value in the dictionary (number of color components)
+                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                            const n = (profileStream as any).dict.get(PDFName.of('N'));
+                                            if (n === 3) {
+                                                cmykOk = false; // N=3 means RGB in ICC profiles
+                                            }
+                                        }
+                                    } catch (e) { /* ignore */ }
+                                }
                             }
                         }
 
@@ -83,6 +99,27 @@ export async function checkPdfPolicy(file: File): Promise<PolicyCheckResult> {
                             cmykOk = false;
                         }
                     }
+                } else if (obj.constructor.name === 'PDFDict' || obj.constructor.name === 'PDFPageContext') {
+                    // Check Graphic States (ExtGState) for RGB transparency blending spaces
+                    try {
+                        const dict = obj as any;
+                        const type = dict.get ? dict.get(PDFName.of('Type')) : undefined;
+                        if (type === PDFName.of('ExtGState')) {
+                            const cs = dict.get(PDFName.of('CS')); // Blending color space
+                            if (cs instanceof PDFName && cs.decodeText().includes('RGB')) {
+                                cmykOk = false;
+                            } else if (cs && cs.constructor.name === 'PDFArray') {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const arr = cs as any;
+                                if (arr.size() > 0) {
+                                    const first = arr.get(0);
+                                    if (first instanceof PDFName && first.decodeText().includes('RGB')) {
+                                        cmykOk = false;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) { /* ignore */ }
                 }
             }
         } catch (err) {
