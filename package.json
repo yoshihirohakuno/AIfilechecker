@@ -13,6 +13,7 @@
     "next": "16.1.6",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.5.207",
+    "playwright": "^1.58.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-dropzone": "^15.0.0"

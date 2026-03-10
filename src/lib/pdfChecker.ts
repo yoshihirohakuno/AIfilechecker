@@ -37,7 +37,7 @@ export async function checkPdfPolicy(file: File): Promise<PolicyCheckResult> {
         }
 
         const loadingTask = pdfjsLib.getDocument({
-            data: new Uint8Array(arrayBuffer),
+            data: new Uint8Array(arrayBuffer.slice(0)),
             standardFontDataUrl: `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/standard_fonts/`,
             disableFontFace: true,
             cMapUrl: `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/cmaps/`,
